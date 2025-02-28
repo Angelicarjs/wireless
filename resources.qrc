@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/plugins/Wireless" >
+        <file>icon.png</file>
+        <file>icon/letter-i.png</file>
+    </qresource>
+</RCC>
