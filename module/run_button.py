@@ -142,7 +142,10 @@ class RUN_BUTTON:
             print ("error in intersect_PC_AI")
             return None
         # 2.Calculate the weighted centroid of the potential clients in each area of interest
-        
+        weighted_centroids_calculated = self.weighted_centroids(potential_clients,areas_interest)
+        if not weighted_centroids_calculated:
+            print ("error in weighted_centroids")
+            return None
 
 
     #Intersect the potential clients with the areas of interest
@@ -171,8 +174,8 @@ class RUN_BUTTON:
 
                             CREATE TABLE {schema_name}.intersect_AI_PC AS
                             SELECT e.*, p.id AS polygon_id
-                            FROM example.{PC_name} e
-                            JOIN example.{AI_name} p
+                            FROM {schema_name}.{PC_name} e
+                            JOIN {schema_name}.{AI_name} p
                             ON ST_Contains(p.geom, e.geom);
                         END $$;
                     """
@@ -199,7 +202,7 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close() 
 
-        print('0.1 . Runtime: creating a merged FCC_table data ' + str((datetime.now() - inittime).total_seconds()))
+        print('0.1 . Runtime: creating a intersect_PC_AI ' + str((datetime.now() - inittime).total_seconds()))
         # print("... \n")
         return True
 
@@ -214,24 +217,43 @@ class RUN_BUTTON:
 
         try:
                 query=f"""
-                    -- Calculate the average centroids of the potetial clients
-                        WITH weighted_centroids AS (
+                   -- Asegurar que la columna existe antes de usarla
+                    DO $$ 
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 
+                            FROM information_schema.columns 
+                            WHERE table_schema = '{schema_name}' 
+                            AND table_name = '{AI_name}' 
+                            AND column_name = 'centroid_weighted'
+                        ) THEN
+                            ALTER TABLE {schema_name}.{AI_name} 
+                            ADD COLUMN centroid_weighted geometry(Point, 4326);
+                        END IF;
+                    END $$;
+
+                    -- Crear la CTE y hacer el UPDATE en una sola ejecución
+                    WITH weighted_centroids AS (
                         SELECT 
-                            p.fid AS polygon_id,
-                            AVG(ST_X(e.geom)) AS avg_x, -- Average of x cordinates 
-                            AVG(ST_Y(e.geom)) AS avg_y  -- Average of y cordinates 
-                        FROM FROM example.{PC_name} e
-                        JOIN example.{AI_name} p
+                            p.id AS polygon_id,
+                            AVG(ST_X(e.geom)) AS avg_x, -- Promedio de coordenadas X 
+                            AVG(ST_Y(e.geom)) AS avg_y  -- Promedio de coordenadas Y  
+                        FROM {schema_name}.{PC_name} e
+                        JOIN {schema_name}.{AI_name} p
                         ON ST_Contains(p.geom, e.geom)
-                        GROUP BY p.fid
-                        )
-                        
-                        -- Update the areas of interest table with the centroid of potential clientss
-                        UPDATE example.{AI_name} p
-                        SET centroid_weighted = ST_SetSRID(ST_MakePoint(wc.avg_x, wc.avg_y), 4326)
-                        FROM weighted_centroids wc
-                        WHERE spa.fid = wc.polygon_id;
+                        GROUP BY p.id
+                    )
+                    UPDATE {schema_name}.{AI_name} p
+                    SET centroid_weighted = ST_SetSRID(ST_MakePoint(wc.avg_x, wc.avg_y), 4326)
+                    FROM weighted_centroids wc
+                    WHERE p.id = wc.polygon_id;
                         """
+                # print(f"Executing query: {query}")
+                self.cur.execute(query)
+                
+                # Commit the modification in the database
+                self.conn.commit()
+
         except Exception as e:
                 print(f"Error: {e}")
                 self.conn.rollback()  # In case of error, follow the rollback
@@ -241,7 +263,7 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close() 
 
-        print('0.1 . Runtime: creating a merged FCC_table data ' + str((datetime.now() - inittime).total_seconds()))
+        print('0.1 . Runtime: creating a weighted_centroids ' + str((datetime.now() - inittime).total_seconds()))
         # print("... \n")
         return True
             
