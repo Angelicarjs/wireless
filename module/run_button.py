@@ -1,8 +1,6 @@
 from qgis.core import *
 from qgis.utils import *
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import QVariant
-from qgis.PyQt.QtGui import QIcon
 
 import os
 import time
@@ -138,11 +136,13 @@ class RUN_BUTTON:
         """ Here it process the real work functions """
         print(potential_clients,areas_interest,towers,fiber_points)
 
-        # 0. Intersect the potential clients with the areas of interest
+        # 1. Intersect the potential clients with the areas of interest
         intersected_PC_AI = self.intersect_PC_AI(potential_clients,areas_interest)
         if not intersected_PC_AI:
             print ("error in intersect_PC_AI")
             return None
+        # 2.Calculate the weighted centroid of the potential clients in each area of interest
+        
 
 
     #Intersect the potential clients with the areas of interest
@@ -170,7 +170,7 @@ class RUN_BUTTON:
                             DROP TABLE IF EXISTS {schema_name}.intersect_AI_PC;
 
                             CREATE TABLE {schema_name}.intersect_AI_PC AS
-                            SELECT e.*, p.fid AS polygon_id
+                            SELECT e.*, p.id AS polygon_id
                             FROM example.{PC_name} e
                             JOIN example.{AI_name} p
                             ON ST_Contains(p.geom, e.geom);
@@ -203,4 +203,45 @@ class RUN_BUTTON:
         # print("... \n")
         return True
 
-    
+    #Calculate the weighted centroid of the potential clients in each area of interest
+    def weighted_centroids(self,potential_clients,areas_interest):
+        inittime = datetime.now()
+
+        # Set the variables
+        PC_name = potential_clients.name()
+        AI_name = areas_interest.name()
+        schema_name = "example"
+
+        try:
+                query=f"""
+                    -- Calculate the average centroids of the potetial clients
+                        WITH weighted_centroids AS (
+                        SELECT 
+                            p.fid AS polygon_id,
+                            AVG(ST_X(e.geom)) AS avg_x, -- Average of x cordinates 
+                            AVG(ST_Y(e.geom)) AS avg_y  -- Average of y cordinates 
+                        FROM FROM example.{PC_name} e
+                        JOIN example.{AI_name} p
+                        ON ST_Contains(p.geom, e.geom)
+                        GROUP BY p.fid
+                        )
+                        
+                        -- Update the areas of interest table with the centroid of potential clientss
+                        UPDATE example.{AI_name} p
+                        SET centroid_weighted = ST_SetSRID(ST_MakePoint(wc.avg_x, wc.avg_y), 4326)
+                        FROM weighted_centroids wc
+                        WHERE spa.fid = wc.polygon_id;
+                        """
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close() 
+
+        print('0.1 . Runtime: creating a merged FCC_table data ' + str((datetime.now() - inittime).total_seconds()))
+        # print("... \n")
+        return True
+            
