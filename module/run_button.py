@@ -114,14 +114,31 @@ class RUN_BUTTON:
         print ("Analyzing " + state)
         list = str(state).split()                # e.g. '01 - ALABAMA'
         state_numbers = list[0]                  # aka '01'
-   
+        print(state_numbers)
+
+        # Dictionary mapping FIPS codes to UTM EPSG codes
+        fips_to_epsg = {
+            1: 32616,  2: 32604,  4: 32612,  5: 32615,  6: 32611,  8: 32613,  9: 32618, 10: 32618,
+            12: 32617, 13: 32617, 15: 32604, 16: 32612, 17: 32616, 18: 32616, 19: 32615, 20: 32614,
+            21: 32616, 22: 32615, 23: 32619, 24: 32618, 25: 32619, 26: 32616, 27: 32615, 28: 32616,
+            29: 32615, 30: 32613, 31: 32614, 32: 32611, 33: 32619, 34: 32618, 35: 32613, 36: 32618,
+            37: 32617, 38: 32614, 39: 32617, 40: 32614, 41: 32611, 42: 32618, 44: 32619, 45: 32617,
+            46: 32614, 47: 32616, 48: 32614, 49: 32612, 50: 32618, 51: 32618, 53: 32610, 54: 32617,
+            55: 32616, 56: 32613
+        }
+
+        state_epsg = fips_to_epsg.get(int(state_numbers))
+
+        print(state_epsg)
+    
         """ Here it set the input parameters """
         #input layers
         potential_clients = Wireless_dialog.PCComboBox.currentLayer()
         areas_interest = Wireless_dialog.AIComboBox.currentLayer()
         towers = Wireless_dialog.TComboBox.currentLayer()
         fiber_points = Wireless_dialog.FComboBox.currentLayer()
-        
+        PC_buffer_miles = Wireless_dialog.Cbuffer.text()
+        T_buffer_miles = Wireless_dialog.Tbuffer.text()
         #output path
         output_dir = self.Wireless_dialog.output_dir.filePath()
 
@@ -134,7 +151,7 @@ class RUN_BUTTON:
         start_time = datetime.now()
 
         """ Here it process the real work functions """
-        print(potential_clients,areas_interest,towers,fiber_points)
+        print(PC_buffer_miles,T_buffer_miles)
 
         # 1. Intersect the potential clients with the areas of interest
         intersected_PC_AI = self.intersect_PC_AI(potential_clients,areas_interest)
@@ -217,7 +234,7 @@ class RUN_BUTTON:
 
         try:
                 query=f"""
-                   -- Asegurar que la columna existe antes de usarla
+                   -- Check the column exists
                     DO $$ 
                     BEGIN
                         IF NOT EXISTS (
@@ -232,12 +249,12 @@ class RUN_BUTTON:
                         END IF;
                     END $$;
 
-                    -- Crear la CTE y hacer el UPDATE en una sola ejecución
+                    -- Create the CTE and update
                     WITH weighted_centroids AS (
                         SELECT 
                             p.id AS polygon_id,
-                            AVG(ST_X(e.geom)) AS avg_x, -- Promedio de coordenadas X 
-                            AVG(ST_Y(e.geom)) AS avg_y  -- Promedio de coordenadas Y  
+                            AVG(ST_X(e.geom)) AS avg_x, -- average of X coordinates 
+                            AVG(ST_Y(e.geom)) AS avg_y  -- average of Y coordinates 
                         FROM {schema_name}.{PC_name} e
                         JOIN {schema_name}.{AI_name} p
                         ON ST_Contains(p.geom, e.geom)
@@ -264,6 +281,48 @@ class RUN_BUTTON:
                     self.conn.close() 
 
         print('0.1 . Runtime: creating a weighted_centroids ' + str((datetime.now() - inittime).total_seconds()))
-        # print("... \n")
         return True
             
+    #Create the buffer around the centroid of the potential clients
+    def bufferPC(self, PC_buffer_miles,state_epsg,AI_name ):
+        inittime = datetime.now()
+
+        # Set the variables
+        schema_name = "example"
+        buffer_meters = PC_buffer_miles * 1609.34
+
+        try:
+            query=f"""
+                --> 
+                    -- Drop the column if exists
+                    ALTER TABLE {schema_name}.{AI_name} 
+                    DROP COLUMN buffer_{PC_buffer_miles}_miles;
+
+                    -- Create a new column with the geometry
+                    ALTER TABLE {schema_name}.{AI_name} 
+                    ADD COLUMN buffer_{PC_buffer_miles}_miles geometry(Polygon, {state_epsg});
+
+                    -- Calculate the buffer in meters around the centroids
+                    UPDATE {schema_name}.{AI_name} 
+                    SET buffer_{PC_buffer_miles}_miles = ST_Buffer(centroid_weighted, {buffer_meters});
+                """
+                
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('0.1 . Runtime: creating a buffer around potential clients ' + str((datetime.now() - inittime).total_seconds()))
+        # print("... \n")
+        return True
+
+    #Create the buffer around the towers

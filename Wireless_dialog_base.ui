@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>491</width>
+    <width>503</width>
     <height>651</height>
    </rect>
   </property>
@@ -36,7 +36,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>410</y>
+     <y>470</y>
      <width>351</width>
      <height>31</height>
     </rect>
@@ -71,7 +71,7 @@
    <property name="geometry">
     <rect>
      <x>170</x>
-     <y>550</y>
+     <y>580</y>
      <width>141</width>
      <height>41</height>
     </rect>
@@ -89,7 +89,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>470</y>
+     <y>520</y>
      <width>351</width>
      <height>41</height>
     </rect>
@@ -99,7 +99,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>300</y>
+     <y>390</y>
      <width>351</width>
      <height>51</height>
     </rect>
@@ -120,7 +120,7 @@
    <property name="geometry">
     <rect>
      <x>80</x>
-     <y>270</y>
+     <y>360</y>
      <width>341</width>
      <height>31</height>
     </rect>
@@ -155,7 +155,7 @@
        </font>
       </property>
       <property name="text">
-       <string>Potential clients:</string>
+       <string>Potential clients</string>
       </property>
      </widget>
     </item>
@@ -170,7 +170,7 @@
        </font>
       </property>
       <property name="text">
-       <string>Areas of interest:</string>
+       <string>Areas of interest</string>
       </property>
      </widget>
     </item>
@@ -233,8 +233,8 @@
   <widget class="QLabel" name="separator_2">
    <property name="geometry">
     <rect>
-     <x>0</x>
-     <y>220</y>
+     <x>10</x>
+     <y>310</y>
      <width>491</width>
      <height>31</height>
     </rect>
@@ -251,9 +251,9 @@
   <widget class="QLabel" name="separator">
    <property name="geometry">
     <rect>
-     <x>0</x>
-     <y>360</y>
-     <width>491</width>
+     <x>10</x>
+     <y>430</y>
+     <width>481</width>
      <height>31</height>
     </rect>
    </property>
@@ -264,6 +264,62 @@
    </property>
    <property name="text">
     <string>_______________________________________________________________________</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="PCDLabel_2">
+   <property name="geometry">
+    <rect>
+     <x>35</x>
+     <y>260</y>
+     <width>241</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>Centroid clientes buffer (miles)</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="PCDLabel_3">
+   <property name="geometry">
+    <rect>
+     <x>35</x>
+     <y>290</y>
+     <width>251</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="font">
+    <font>
+     <pointsize>10</pointsize>
+    </font>
+   </property>
+   <property name="text">
+    <string>Centroid towers buffer (miles)</string>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="Tbuffer">
+   <property name="geometry">
+    <rect>
+     <x>320</x>
+     <y>290</y>
+     <width>116</width>
+     <height>24</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QLineEdit" name="Cbuffer">
+   <property name="geometry">
+    <rect>
+     <x>320</x>
+     <y>260</y>
+     <width>116</width>
+     <height>24</height>
+    </rect>
    </property>
   </widget>
  </widget>
