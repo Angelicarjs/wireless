@@ -114,8 +114,7 @@ class RUN_BUTTON:
         print ("Analyzing " + state)
         list = str(state).split()                # e.g. '01 - ALABAMA'
         state_numbers = list[0]                  # aka '01'
-        print(state_numbers)
-
+      
         # Dictionary mapping FIPS codes to UTM EPSG codes
         fips_to_epsg = {
             1: 32616,  2: 32604,  4: 32612,  5: 32615,  6: 32611,  8: 32613,  9: 32618, 10: 32618,
@@ -159,6 +158,14 @@ class RUN_BUTTON:
             return None
         # 3.Create the buffer around the centroid of the potential clients
         bufferPC_calculated = self.bufferPC(PC_buffer_miles,state_epsg,areas_interest)
+        if not bufferPC_calculated:
+            print ("error in buffer_PC_centroids")
+            return None
+        # 4.Create the buffer around the towers
+        bufferT_calculated = self.bufferT(T_buffer_miles,state_epsg,towers)
+        if not bufferT_calculated:
+            print ("error in bufferT")
+            return None
 
     #Intersect the potential clients with the areas of interest
     def intersect_PC_AI(self,potential_clients,areas_interest):
@@ -214,7 +221,7 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close() 
 
-        print('0.1 . Runtime: creating a intersect_PC_AI ' + str((datetime.now() - inittime).total_seconds()))
+        print('1 . Runtime: creating a intersect_PC_AI ' + str((datetime.now() - inittime).total_seconds()))
         # print("... \n")
         return True
 
@@ -275,7 +282,7 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close() 
 
-        print('0.1 . Runtime: creating a weighted_centroids ' + str((datetime.now() - inittime).total_seconds()))
+        print('2 . Runtime: creating a weighted_centroids ' + str((datetime.now() - inittime).total_seconds()))
         return True
             
     #Create the buffer around the centroid of the potential clients
@@ -324,7 +331,54 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close()
         
-        print('0.1 . Runtime: creating a buffer around potential clients ' + str((datetime.now() - inittime).total_seconds()))
+        print('3 . Runtime: creating a buffer around potential clients ' + str((datetime.now() - inittime).total_seconds()))
         return True
 
     #Create the buffer around the towers
+    def bufferT(self, T_buffer_miles,state_epsg,towers):
+        inittime = datetime.now()
+
+        # Set the variables
+        schema_name = "example"
+        buffer_meters = float(T_buffer_miles) * 1609.34
+        print(buffer_meters)
+        T_name = towers.name()
+
+        try:
+            query=f"""
+                --> 
+                    -- Drop the table if it exists
+                    DROP TABLE IF EXISTS {schema_name}.buffer_tower_{T_buffer_miles}_miles;
+
+                    -- Create new table with all columns and transformed geometry
+                    CREATE TABLE {schema_name}.buffer_tower_{T_buffer_miles}_miles AS
+                    SELECT 
+                        id, 
+                        ST_Transform(geom, {state_epsg}) AS geom_utm
+                    FROM {schema_name}.{T_name};
+ 
+                  -- Create a new column with the geometry
+                    ALTER TABLE {schema_name}.buffer_tower_{T_buffer_miles}_miles 
+                    ADD COLUMN buffer_tower_{T_buffer_miles}_miles geometry(Polygon, {state_epsg});
+
+                    -- Calculate the buffer in meters around the centroids
+                    UPDATE {schema_name}.buffer_tower_{T_buffer_miles}_miles 
+                    SET buffer_tower_{T_buffer_miles}_miles = ST_Buffer(geom_utm, {buffer_meters});
+                """
+                
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('4 . Runtime: creating a buffer around towers' + str((datetime.now() - inittime).total_seconds()))
+        return True
