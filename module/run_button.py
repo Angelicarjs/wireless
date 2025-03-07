@@ -151,25 +151,35 @@ class RUN_BUTTON:
         if not intersected_PC_AI:
             print ("error in intersect_PC_AI")
             return None
+        
         # 2.Calculate the weighted centroid of the potential clients in each area of interest
         weighted_centroids_calculated = self.weighted_centroids(potential_clients,areas_interest)
         if not weighted_centroids_calculated:
             print ("error in weighted_centroids")
             return None
+        
         # 3.Create the buffer around the centroid of the potential clients
         bufferPC_calculated = self.bufferPC(PC_buffer_miles,state_epsg,areas_interest)
         if not bufferPC_calculated:
             print ("error in buffer_PC_centroids")
             return None
+        
         # 4.Create the buffer around the towers
         bufferT_calculated = self.bufferT(T_buffer_miles,state_epsg,towers)
         if not bufferT_calculated:
             print ("error in bufferT")
             return None
-
+        
+        #5.Evaluate fiber availability
         PC_per_tower_calculated = self.PC_per_tower(towers,potential_clients,T_buffer_miles)
-        if not bufferT_calculated:
+        if not PC_per_tower_calculated:
             print ("error in calculate pc per tower")
+            return None
+        
+        #6.Evaluate fiber availability
+        fiber_checked = self.fiber_check(towers, fiber_points,T_buffer_miles)
+        if not fiber_checked:
+            print ("error in calculate fiber check")
             return None
         
     #Intersect the potential clients with the areas of interest
@@ -457,4 +467,57 @@ class RUN_BUTTON:
         
         print('4 . Runtime: creating account of potential clients per tower' + str((datetime.now() - inittime).total_seconds()))
         return True
-         
+   
+    #Evaluate fiber availability 
+    def fiber_check(self, towers, fiber,T_buffer_miles):
+
+        inittime = datetime.now()
+
+        # Set the variables
+        schema_name = "example"
+        T_name = towers.name()
+        F_name = fiber.name()
+        
+        try:
+            query=f""" 
+                 -- Add a new column for geometry
+                ALTER TABLE {schema_name}.{T_name}  
+                ADD COLUMN IF NOT EXISTS has_fiber BOOLEAN DEFAULT FALSE;  
+
+                -- Reset in case it was previously set
+                UPDATE {schema_name}.{T_name} SET has_fiber = false;
+
+                WITH fiber_counts AS (
+                    SELECT t.id AS tower_id, 
+                        CASE 
+                            WHEN COUNT(f.fid) > 0 THEN TRUE 
+                            ELSE FALSE 
+                        END AS has_fiber
+                    FROM {schema_name}.{T_name} t
+                    LEFT JOIN {schema_name}.{F_name} f
+                    ON ST_Within(f.geom, t.buffer_tower_{T_buffer_miles}_miles) -- Check if the fiber point is within the buffer
+                    GROUP BY t.id
+                )
+                UPDATE {schema_name}.{T_name} t
+                SET has_fiber = fc.has_fiber
+                FROM fiber_counts fc
+                WHERE t.id = fc.tower_id;
+
+                """
+
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('4 . Runtime: checking fiber per tower' + str((datetime.now() - inittime).total_seconds()))
+        return True
