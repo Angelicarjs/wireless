@@ -167,6 +167,11 @@ class RUN_BUTTON:
             print ("error in bufferT")
             return None
 
+        PC_per_tower_calculated = self.PC_per_tower(towers,potential_clients,T_buffer_miles)
+        if not bufferT_calculated:
+            print ("error in calculate pc per tower")
+            return None
+        
     #Intersect the potential clients with the areas of interest
     def intersect_PC_AI(self,potential_clients,areas_interest):
         """Creates a unified table and updates the concatenated column"""
@@ -356,14 +361,29 @@ class RUN_BUTTON:
                         id, 
                         ST_Transform(geom, {state_epsg}) AS geom_utm
                     FROM {schema_name}.{T_name};
- 
-                  -- Create a new column with the geometry
+
+                    -- Add a new column for the buffer geometry in the same projection
                     ALTER TABLE {schema_name}.buffer_tower_{T_buffer_miles}_miles 
                     ADD COLUMN buffer_tower_{T_buffer_miles}_miles geometry(Polygon, {state_epsg});
 
                     -- Calculate the buffer in meters around the centroids
                     UPDATE {schema_name}.buffer_tower_{T_buffer_miles}_miles 
                     SET buffer_tower_{T_buffer_miles}_miles = ST_Buffer(geom_utm, {buffer_meters});
+
+                    -- Drop the column if it exists
+                    ALTER TABLE {schema_name}.{T_name} 
+                    DROP COLUMN IF EXISTS buffer_tower_{T_buffer_miles}_miles;
+
+
+                    -- Add the buffer geometry to the original tower table in WGS 84 (4326)
+                    ALTER TABLE {schema_name}.{T_name}
+                    ADD COLUMN buffer_tower_{T_buffer_miles}_miles geometry(Polygon, 4326);
+
+                    -- Populate the new buffer column in the original table with transformed buffers
+                    UPDATE {schema_name}.{T_name}
+                    SET buffer_tower_{T_buffer_miles}_miles = ST_Transform(b.buffer_tower_{T_buffer_miles}_miles, 4326)
+                    FROM {schema_name}.buffer_tower_{T_buffer_miles}_miles b
+                    WHERE {schema_name}.{T_name}.id = b.id;
                 """
                 
             self.cur.execute(query)
@@ -382,3 +402,59 @@ class RUN_BUTTON:
         
         print('4 . Runtime: creating a buffer around towers' + str((datetime.now() - inittime).total_seconds()))
         return True
+
+    #Count potential clients per tower
+    def PC_per_tower(self, towers,potential_clients,T_buffer_miles):
+         
+        inittime = datetime.now()
+
+        # Set the variables
+        schema_name = "example"
+        T_name = towers.name()
+        PC_name = potential_clients.name()
+        
+        try:
+            query=f""" 
+                   -- Add a new column to store the count of eligible points within the buffer  
+                ALTER TABLE {schema_name}.{T_name}  
+                ADD COLUMN IF NOT EXISTS eligible_count INTEGER DEFAULT 0;  
+
+                -- Reset eligible_count in case it was previously set
+                UPDATE {schema_name}.{T_name} SET eligible_count = 0;
+
+                -- Add the buffer count column to the original table (if not exists)
+                ALTER TABLE {schema_name}.{T_name}  
+                ADD COLUMN IF NOT EXISTS eligible_counts_buffer_{T_buffer_miles}_miles INTEGER DEFAULT 0;
+
+                -- Update the towers table with the count of pc points within each buffer  
+                WITH eligible_counts AS (  
+                    SELECT t.id AS tower_id, COUNT(e.id) AS num_eligibles  
+                    FROM {schema_name}.{T_name} t  
+                    JOIN {schema_name}.{PC_name} e  
+                    ON ST_Within(ST_Transform(e.geom, 4326), t.buffer_tower_{T_buffer_miles}_miles)  -- Count points within the buffer  
+                    GROUP BY t.id  
+                )  
+                UPDATE {schema_name}.{T_name} t  
+                SET eligible_counts_buffer_{T_buffer_miles}_miles = COALESCE(ec.num_eligibles, 0)  
+                FROM eligible_counts ec  
+                WHERE t.id = ec.tower_id;
+
+                """
+
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('4 . Runtime: creating account of potential clients per tower' + str((datetime.now() - inittime).total_seconds()))
+        return True
+         
