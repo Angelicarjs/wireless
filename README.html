@@ -1,27 +1,30 @@
-<html>
-<body>
-    <h1>QGIS Plugin - Wireless Analysis</h1>
-    <p>The QGIS plugin performs the following tasks:</p>
-    <ul>
-        <li>Intersect potential clients with specific problematic areas (SPA) where internet service is needed.</li>
-        <li>Calculate weighted centroids based on the distribution of potential clients.</li>
-        <li>Generate buffers around centroids with a user-defined distance parameter.</li>
-        <li>Generate buffers around existing towers based on another user-defined distance parameter.</li>
-        <li>Count the number of potential clients per tower within a given buffer.</li>
-        <li>Evaluate fiber availability for the identified towers.</li>
-        <li>Filter towers based on height (only towers with height ≤ 175 feet will be considered).</li>
-        <li>Remove towers with no eligible clients in their vicinity.</li>
-        <li>Generate the final output layer that includes:</li>
-        <ul>
-            <li>Number of towers per SPA</li>
-            <li>Average tower height</li>
-            <li>Sum of eligible clients</li>
-            <li>Number of towers with fiber connectivity</li>
-        </ul>
-    </ul>
-    <h2>Configuration to Run the Tool</h2>
-    <p>To run this tool, you need to have a PostgreSQL database connected called <strong>wireless</strong>. Additionally, a schema named <strong>example</strong> should be created, containing the layers found in the data folder.
-    This layers belong to Louisiana
-    </p>
-</body>
-</html>
+# QGIS Plugin - Wireless Analysis
+
+The QGIS plugin performs the following tasks:
+
+### Spatial Analysis
+- **Intersect** potential clients with specific problematic areas (SPA) where internet service is needed.
+- **Calculate weighted centroids** based on the distribution of potential clients.
+- **Generate buffers** around centroids with a user-defined distance parameter.
+- **Generate buffers** around existing towers based on another user-defined distance parameter.
+
+### Data Processing
+- **Count potential clients per tower** within a given buffer.
+- **Evaluate fiber availability** for the identified towers.
+- **Filter towers** based on height (**≤ 175 feet**).
+- **Remove towers** with no eligible clients in their vicinity.
+
+### Final Output Layer Includes
+- **Number of towers per SPA**
+- **Average tower height**
+- **Sum of eligible clients**
+- **Number of towers with fiber connectivity**
+
+---
+
+## Configuration to Run the Tool
+
+To run this tool, you need to have a **PostgreSQL database** connected called **`wireless`**.  
+Additionally, a schema named **`example`** should be created, containing the layers found in the data folder.
+
+These layers belong to Louisiana.
