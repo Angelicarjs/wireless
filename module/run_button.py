@@ -182,6 +182,12 @@ class RUN_BUTTON:
             print ("error in calculate fiber check")
             return None
         
+        #7.Filter towers based on height (≤ 175 feet) and remove towers with no eligible
+        filtered = self.filter(towers, T_buffer_miles)
+        if not filtered:
+            print ("error in filterthe towers")
+            return None
+        
     #Intersect the potential clients with the areas of interest
     def intersect_PC_AI(self,potential_clients,areas_interest):
         """Creates a unified table and updates the concatenated column"""
@@ -521,3 +527,52 @@ class RUN_BUTTON:
         
         print('4 . Runtime: checking fiber per tower' + str((datetime.now() - inittime).total_seconds()))
         return True
+    
+    #Filter towers based on height (≤ 175 feet) and remove towers with no eligible clients in their vicinity.
+    def filter(self, towers, T_buffer_miles):
+
+        inittime = datetime.now()
+
+        # Set the variables
+        schema_name = "example"
+        T_name = towers.name()
+  
+        try:
+            query=f""" 
+                -- Add a new column for height in feet
+                ALTER TABLE {schema_name}.{T_name}
+                ADD COLUMN IF NOT EXISTS height_ag_ft NUMERIC;
+
+                -- Update the new column with values converted to feet
+                UPDATE example.towers
+                SET height_ag_ft = ("overall_height_above_ground")::FLOAT * 3.28084
+                WHERE "overall_height_above_ground" ~ '^[0-9]+(\.[0-9]+)?$';
+
+                --> APPLY FILTER height_ag_ft <= 175
+
+                DELETE FROM {schema_name}.{T_name}
+                WHERE height_ag_ft < 175;   
+
+                --> DELETE TOWERS WITH 0 ELIGIBLE POINTS
+                DELETE FROM {schema_name}.{T_name}
+                WHERE eligible_counts_buffer_{T_buffer_miles}_miles = 0;
+
+                """
+
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('4 . Runtime: checking fiber per tower' + str((datetime.now() - inittime).total_seconds()))
+        return True
+    
