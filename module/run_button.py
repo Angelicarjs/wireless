@@ -188,6 +188,12 @@ class RUN_BUTTON:
             print ("error in filterthe towers")
             return None
         
+        #8. Create the final output
+        final_output_calculated = self.finaloutput(areas_interest,towers,PC_buffer_miles)
+        if not final_output_calculated:
+            print ("error in final output calculation")
+            return None
+        
     #Intersect the potential clients with the areas of interest
     def intersect_PC_AI(self,potential_clients,areas_interest):
         """Creates a unified table and updates the concatenated column"""
@@ -336,6 +342,20 @@ class RUN_BUTTON:
                     -- Calculate the buffer in meters around the centroids
                     UPDATE {schema_name}.buffer_{PC_buffer_miles}_miles 
                     SET buffer_{PC_buffer_miles}_miles = ST_Buffer(geom_utm, {buffer_meters});
+
+                    -- Drop the column if it exists
+                    ALTER TABLE {schema_name}.{AI_name} 
+                    DROP COLUMN IF EXISTS buffer_{PC_buffer_miles}_miles;
+
+                    -- Add the buffer geometry to the original tower table in WGS 84 (4326)
+                    ALTER TABLE {schema_name}.{AI_name}
+                    ADD COLUMN buffer_{PC_buffer_miles}_miles geometry(Polygon, 4326);
+
+                    -- Populate the new buffer column in the original table with transformed buffers
+                    UPDATE {schema_name}.{AI_name}
+                    SET buffer_{PC_buffer_miles}_miles = ST_Transform(b.buffer_{PC_buffer_miles}_miles, 4326)
+                    FROM {schema_name}.buffer_{PC_buffer_miles}_miles b
+                    WHERE {schema_name}.{AI_name}.id = b.id::INTEGER;
                 """
                 
             self.cur.execute(query)
@@ -389,7 +409,6 @@ class RUN_BUTTON:
                     -- Drop the column if it exists
                     ALTER TABLE {schema_name}.{T_name} 
                     DROP COLUMN IF EXISTS buffer_tower_{T_buffer_miles}_miles;
-
 
                     -- Add the buffer geometry to the original tower table in WGS 84 (4326)
                     ALTER TABLE {schema_name}.{T_name}
@@ -496,7 +515,7 @@ class RUN_BUTTON:
                 WITH fiber_counts AS (
                     SELECT t.id AS tower_id, 
                         CASE 
-                            WHEN COUNT(f.fid) > 0 THEN TRUE 
+                            WHEN COUNT(f.id) > 0 THEN TRUE 
                             ELSE FALSE 
                         END AS has_fiber
                     FROM {schema_name}.{T_name} t
@@ -573,6 +592,48 @@ class RUN_BUTTON:
                 if self.conn:
                     self.conn.close()
         
-        print('4 . Runtime: checking fiber per tower' + str((datetime.now() - inittime).total_seconds()))
+        print('4 . Runtime: filtering towers' + str((datetime.now() - inittime).total_seconds()))
         return True
     
+    #Adding columns: Number of towers per SPA, Average tower height, Sum of eligible clients, Number of towers with fiber connectivity
+    def finaloutput(self,areas_interest,towers,PC_buffer_miles):
+          # Set the variables
+        schema_name = "example"
+        T_name = towers.name()
+        AI_name = areas_interest.name()
+        inittime = datetime.now()
+  
+        try:
+            query=f""" 
+                ALTER TABLE {schema_name}.{AI_name}
+                ADD COLUMN IF NOT EXISTS tower_count INTEGER;
+
+                WITH tower_counts AS (
+                    SELECT s.id AS spa_id, COUNT(t.id) AS tower_count
+                    FROM {schema_name}.{AI_name} s
+                    LEFT JOIN {schema_name}.{T_name} t
+                    ON ST_Within(t.geom, s.buffer_{PC_buffer_miles}_miles ) 
+                    GROUP BY s.id
+                )
+                UPDATE {schema_name}.{AI_name} s
+                SET tower_count = tc.tower_count
+                FROM tower_counts tc
+                WHERE s.id = tc.spa_id::INTEGER;
+                """
+
+            self.cur.execute(query)
+                
+            # Commit the modification in the database
+            self.conn.commit()
+            
+        except Exception as e:
+                print(f"Error: {e}")
+                self.conn.rollback()  # In case of error, follow the rollback
+
+                if self.cur:
+                    self.cur.close()
+                if self.conn:
+                    self.conn.close()
+        
+        print('4 . Runtime: creating the output layer' + str((datetime.now() - inittime).total_seconds()))
+        return True
